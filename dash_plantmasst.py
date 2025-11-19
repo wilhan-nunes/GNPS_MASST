@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import sys
 import dash
 import werkzeug.utils
 from dash import dcc, html, ctx
@@ -245,12 +246,28 @@ CONTRIBUTORS_DASHBOARD = [
 ]
 
 
-def create_example(lib_id, use_peaks=False):
+def create_example_link(lib_id, use_peaks=False):
+    """Create a link that will load example data via callback when clicked."""
+    # Encode the lib_id and use_peaks flag in the URL hash
+    hash_dict = {
+        "example_lib_id": lib_id,
+        "use_peaks": use_peaks
+    }
+    return f"/plantmasst#{urllib.parse.quote(json.dumps(hash_dict))}"
+
+
+def fetch_example_data(lib_id, use_peaks=False):
+    """Fetch spectrum data from API - only called when example is clicked."""
     if not use_peaks:
-        hash_dict = {"usi1": f"mzspec:GNPS:GNPS-LIBRARY:accession:{lib_id}", "peaks": [""], "precursor_mz": [""]}
-        return f"/plantmasst#{urllib.parse.quote(json.dumps(hash_dict))}"
+        return {
+            "usi1": f"mzspec:GNPS:GNPS-LIBRARY:accession:{lib_id}",
+            "peaks": "",
+            "precursor_mz": "",
+            "charge": ""
+        }
     else:
         url = f"https://metabolomics-usi.gnps2.org/json/?usi1=mzspec:GNPS:GNPS-LIBRARY:accession:{lib_id}"
+        print("Fetching example data from", url, file=sys.stderr)
         response = requests.get(url)
         data = response.json()
 
@@ -260,15 +277,14 @@ def create_example(lib_id, use_peaks=False):
         charge = data.get('precursor_charge')
         precursor_mz = data.get('precursor_mz')
 
-        hash_dict = {
+        return {
             "usi1": "",
             "peaks": peaks_list,
             "precursor_mz": precursor_mz,
-            "charge": charge}
+            "charge": charge
+        }
 
-        return f"/plantmasst/#{urllib.parse.quote(json.dumps(hash_dict))}"
-
-# Name, ID, Library ID, and use_peaks param
+# Name, ID
 examples_data = [
     ("Sanjoinine A", "CCMSLIB00016358467"),
     ("Moroidin", "CCMSLIB00005435899"),
@@ -289,12 +305,12 @@ examples_data = [
 
 peaks_examples = []
 for text, lib_id in examples_data:
-        peaks_examples.append(html.A(text, href=create_example(lib_id, use_peaks=True))),
+        peaks_examples.append(html.A(text, href=create_example_link(lib_id, use_peaks=True))),
         peaks_examples.append(html.Br())
 
 usi_examples = []
 for text, lib_id in examples_data:
-        usi_examples.append(html.A(text, href=create_example(lib_id, use_peaks=False))),
+        usi_examples.append(html.A(text, href=create_example_link(lib_id, use_peaks=False))),
         usi_examples.append(html.Br())
 
 EXAMPLES_DASHBOARD = [
@@ -380,12 +396,24 @@ def determine_task(search):
     except:
         query_dict = {}
 
-    usi1 = _get_url_param(query_dict, "usi1", 'mzspec:GNPS:GNPS-LIBRARY:accession:CCMSLIB00000085687')
-    peaks = _get_url_param(query_dict, "peaks", '')
-    charge = _get_url_param(query_dict, "charge", '')
+    # Check if this is an example link being clicked
+    if "example_lib_id" in query_dict:
+        lib_id = query_dict.get("example_lib_id")
+        use_peaks = query_dict.get("use_peaks", False)
+        # Fetch the example data only when clicked
+        example_data = fetch_example_data(lib_id, use_peaks)
+        usi1 = example_data.get("usi1", '')
+        peaks = example_data.get("peaks", '')
+        precursor_mz = example_data.get("precursor_mz", '')
+        charge = example_data.get("charge", '')
+    else:
+        # Normal parameter extraction
+        usi1 = _get_url_param(query_dict, "usi1", 'mzspec:GNPS:GNPS-LIBRARY:accession:CCMSLIB00000085687')
+        peaks = _get_url_param(query_dict, "peaks", '')
+        precursor_mz = _get_url_param(query_dict, "precursor_mz", '')
+        charge = _get_url_param(query_dict, "charge", '')
+    
     max_peaks = _get_url_param(query_dict, "max_peaks", None)
-    precursor_mz = _get_url_param(query_dict, "precursor_mz", '')
-    charge = _get_url_param(query_dict, "charge", '')
     pm_tolerance = _get_url_param(query_dict, "pm_tolerance", 0.05)
     fragment_tolerance = _get_url_param(query_dict, "fragment_tolerance", 0.05)
     cosine_threshold = _get_url_param(query_dict, "cosine_threshold", 0.7)
