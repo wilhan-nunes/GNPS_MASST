@@ -286,8 +286,11 @@ def fetch_example_data(lib_id, use_peaks=False):
 
 # Name, ID
 examples_data = [
-    ("Sanjoinine A", "CCMSLIB00016358467"),
     ("Moroidin", "CCMSLIB00005435899"),
+    ("Piperlongumine", "CCMSLIB00010117596"),
+    ("Sanjoinine A", "CCMSLIB00016358467"),
+    ("cyFLLY", "CCMSLIB00016358468"),
+    ("cyFLLY-dc", "CCMSLIB00016358469"),
     ("Rutin", "CCMSLIB00003139483"),
     ("Isoschaftoside", "CCMSLIB00005778294"),
     ("Orientin", "CCMSLIB00004696818"),
