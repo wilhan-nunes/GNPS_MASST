@@ -61,8 +61,9 @@ NAVBAR = dbc.Navbar(
         ),
         dbc.Nav(
             [
-                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2025.04.03", href="/plantmasst")),
+                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2026.01.06", href="/plantmasst")),
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/", target="_blank")),
+                dbc.NavItem(dbc.NavLink("Contribute to plantMASST", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/#contributing-to-plantmasst", target="_blank"))
             ],
         navbar=True)
     ],
