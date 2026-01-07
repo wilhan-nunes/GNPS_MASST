@@ -61,8 +61,9 @@ NAVBAR = dbc.Navbar(
         ),
         dbc.Nav(
             [
-                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2025.04.03", href="/plantmasst")),
+                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2026.01.06", href="/plantmasst")),
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/", target="_blank")),
+                dbc.NavItem(dbc.NavLink("Contribute to plantMASST", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/#contributing-to-plantmasst", target="_blank"))
             ],
         navbar=True)
     ],
@@ -286,8 +287,11 @@ def fetch_example_data(lib_id, use_peaks=False):
 
 # Name, ID
 examples_data = [
-    ("Sanjoinine A", "CCMSLIB00016358467"),
     ("Moroidin", "CCMSLIB00005435899"),
+    ("Piperlongumine", "CCMSLIB00010117596"),
+    ("Sanjoinine A", "CCMSLIB00016358467"),
+    ("cyFLLY", "CCMSLIB00016358468"),
+    ("cyFLLY-dc", "CCMSLIB00016358469"),
     ("Rutin", "CCMSLIB00003139483"),
     ("Isoschaftoside", "CCMSLIB00005778294"),
     ("Orientin", "CCMSLIB00004696818"),
