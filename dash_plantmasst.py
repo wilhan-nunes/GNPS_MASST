@@ -56,12 +56,13 @@ dash_app.index_string = """<!DOCTYPE html>
 NAVBAR = dbc.Navbar(
     children=[
         dbc.NavbarBrand(
-            html.Img(src="https://gnps2.org/static/img/logo.png", width="120px"),
+            html.Img(src="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/img/logo/GNPS2_logo_blue-grey-black.png", width="120px"),
             href="https://www.cs.ucr.edu/~mingxunw/"
         ),
         dbc.Nav(
             [
-                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2026.01.06", href="/plantmasst")),
+                dbc.NavItem(html.Img(src="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/img/logo/plantMASST_logo.svg", height="40px"), className="me-2"),
+                dbc.NavItem(dbc.NavLink("plantMASST Dashboard - Version 2026.01.14", href="/plantmasst")),
                 dbc.NavItem(dbc.NavLink("Documentation", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/", target="_blank")),
                 dbc.NavItem(dbc.NavLink("Contribute to plantMASST", href="https://wang-bioinformatics-lab.github.io/GNPS2_Documentation/plantmasst/#contributing-to-plantmasst", target="_blank"))
             ],
