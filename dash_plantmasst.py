@@ -59,6 +59,16 @@ EXPLORER_SUMMARY_RECORDS = _summary[
     ["id", "Taxa_NCBI", "species", "family", "genus", "order", "class", "phylum", "kingdom", "file_count"]
 ].to_dict("records")
 
+# Clean (non-markdown) copy of the summary for downloading the full table.
+EXPLORER_EXPORT_DF = _summary[
+    ["Taxa_NCBI", "species", "genus", "family", "order", "class", "phylum", "kingdom", "file_count"]
+].copy()
+
+_NCBI_TAXONOMY_URL = "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id="
+for _rec in EXPLORER_SUMMARY_RECORDS:
+    _taxid = _rec["Taxa_NCBI"]
+    _rec["Taxa_NCBI"] = "[{0}]({1}{0})".format(_taxid, _NCBI_TAXONOMY_URL)
+
 TAXID_META = {
     row["id"]: {"species": row.get("species"), "genus": row.get("genus")}
     for row in EXPLORER_SUMMARY_RECORDS
@@ -382,7 +392,7 @@ EXAMPLES_DASHBOARD = [
 EXPLORER_TABLE = dash_table.DataTable(
     id="explorer-table",
     columns=[
-        {"name": "TaxID (NCBI)", "id": "Taxa_NCBI", "type": "numeric"},
+        {"name": "TaxID (NCBI)", "id": "Taxa_NCBI", "presentation": "markdown"},
         {"name": "Species",      "id": "species"},
         {"name": "Genus",        "id": "genus"},
         {"name": "Family",       "id": "family"},
@@ -421,6 +431,7 @@ EXPLORER_TABLE = dash_table.DataTable(
         }
     ],
     tooltip_duration=None,
+    markdown_options={"link_target": "_blank"},
 )
 
 EXPLORER_MODAL = dbc.Modal(
@@ -462,7 +473,7 @@ EXPLORER_MODAL = dbc.Modal(
         dbc.ModalFooter([
             dbc.Button("Select All", id="modal-select-all", color="secondary", size="sm", n_clicks=0, className="me-2"),
             dbc.Button(
-                "Launch Classical Networking Workflow",
+                "Launch Classical Networking / Library Search Workflow",
                 id="modal-networking-btn",
                 href="#",
                 target="_blank",
@@ -522,11 +533,31 @@ BODY = dbc.Container(
                                 dbc.CardHeader(html.H5("PlantMASST Explorer — Browse by Taxon")),
                                 dbc.CardBody(
                                     [
-                                        html.P(
-                                            "Browse all plant taxa represented in the plantMASST database. "
-                                            "Click any value in the File Count column to see the list of "
-                                            "files associated with that taxon."
+                                        dbc.Row(
+                                            [
+                                                dbc.Col(
+                                                    html.P(
+                                                        "Browse all plant taxa represented in the plantMASST database. "
+                                                        "Click any value in the File Count column to see the list of "
+                                                        "files associated with that taxon.",
+                                                        className="mb-0",
+                                                    ),
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Button(
+                                                        "Download Table (TSV)",
+                                                        id="explorer-download-btn",
+                                                        color="primary",
+                                                        size="sm",
+                                                        n_clicks=0,
+                                                    ),
+                                                    width="auto",
+                                                    className="ms-auto text-end",
+                                                ),
+                                            ],
+                                            className="align-items-center mb-2",
                                         ),
+                                        dcc.Download(id="explorer-download"),
                                         EXPLORER_TABLE,
                                     ]
                                 ),
@@ -968,6 +999,17 @@ def toggle_file_modal(active_cell, close_clicks):
 
 
 @dash_app.callback(
+    Output("explorer-download", "data"),
+    Input("explorer-download-btn", "n_clicks"),
+    prevent_initial_call=True,
+)
+def download_explorer_table(n_clicks):
+    return dcc.send_data_frame(
+        EXPLORER_EXPORT_DF.to_csv, "plantmasst_explorer_table.tsv", sep="\t", index=False
+    )
+
+
+@dash_app.callback(
     Output("modal-file-table", "selected_rows"),
     Input("modal-select-all", "n_clicks"),
     [State("modal-file-table", "data"),
@@ -990,7 +1032,18 @@ def toggle_select_all(n_clicks, data, selected_rows):
 def update_networking_link(selected_rows, data):
     if not selected_rows or not data:
         return "#", True
-    usis = [data[i]["file_usi"] for i in selected_rows if i < len(data)]
+    usis = []
+    for i in selected_rows:
+        if i >= len(data):
+            continue
+        row = data[i]
+        usi = row["file_usi"]
+        # Append the file extension (from the Filename column) to the USI so
+        # the downstream USI hash points at the actual file.
+        ext = os.path.splitext(row.get("Filename", ""))[1]
+        if ext and not usi.endswith(ext):
+            usi += ext
+        usis.append(usi)
     if not usis:
         return "#", True
     usi_string = "\\n".join(usis)
