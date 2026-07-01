@@ -978,24 +978,41 @@ dash_app.clientside_callback(
         Output("modal-file-table", "data"),
         Output("file-modal-title", "children"),
         Output("modal-file-table", "selected_rows"),
+        Output("modal-file-table", "filter_query"),
+        Output("explorer-table", "active_cell"),
     ],
     [
         Input("explorer-table", "active_cell"),
         Input("file-modal-close", "n_clicks"),
+        Input("file-modal", "is_open"),
     ],
     prevent_initial_call=True,
 )
-def toggle_file_modal(active_cell, close_clicks):
+def toggle_file_modal(active_cell, close_clicks, is_open):
     triggered = ctx.triggered_id
+
     if triggered == "file-modal-close":
-        return False, dash.no_update, dash.no_update, []
+        # Clear active_cell/filter so clicking the same cell again after
+        # closing will register as a change and re-open the modal fresh.
+        return False, dash.no_update, dash.no_update, [], "", None
+
+    if triggered == "file-modal":
+        # is_open changed without going through file-modal-close: this is the
+        # built-in header "x" button, a backdrop click, or Escape, none of
+        # which run our Python callback on their own. Treat a resulting
+        # False the same as an explicit close so state doesn't go stale.
+        if is_open:
+            return (dash.no_update,) * 6
+        return dash.no_update, dash.no_update, dash.no_update, [], "", None
+
     if triggered == "explorer-table" and active_cell and active_cell.get("column_id") == "file_count":
         taxid = active_cell["row_id"]
         meta = TAXID_META.get(taxid, {})
         label = meta.get("species") or meta.get("genus") or ""
         title = f"Files for TaxID {taxid}" + (f" — {label}" if label else "")
-        return True, FILE_LISTS.get(taxid, []), title, []
-    return dash.no_update, dash.no_update, dash.no_update, dash.no_update
+        return True, FILE_LISTS.get(taxid, []), title, [], "", dash.no_update
+
+    return (dash.no_update,) * 6
 
 
 @dash_app.callback(
@@ -1012,13 +1029,17 @@ def download_explorer_table(n_clicks):
 @dash_app.callback(
     Output("modal-file-table", "selected_rows"),
     Input("modal-select-all", "n_clicks"),
-    [State("modal-file-table", "data"),
+    [State("modal-file-table", "derived_virtual_indices"),
+     State("modal-file-table", "data"),
      State("modal-file-table", "selected_rows")],
     prevent_initial_call=True,
 )
-def toggle_select_all(n_clicks, data, selected_rows):
-    if data and len(selected_rows) < len(data):
-        return list(range(len(data)))
+def toggle_select_all(n_clicks, virtual_indices, data, selected_rows):
+    # derived_virtual_indices holds the indices (into data) of rows that
+    # currently pass the table's filter; fall back to all rows if unfiltered.
+    visible_indices = virtual_indices if virtual_indices is not None else list(range(len(data or [])))
+    if visible_indices and set(selected_rows or []) != set(visible_indices):
+        return list(visible_indices)
     return []
 
 
