@@ -48,31 +48,107 @@ FILE_LISTS = {
 }
 
 _file_counts = _df_files.groupby("Taxa_NCBI").size().reset_index(name="file_count")
-_summary = _file_counts.merge(
-    _df_lineage[["Taxa_NCBI", "kingdom", "phylum", "class", "order", "family", "genus", "species"]],
-    on="Taxa_NCBI", how="left",
+
+_LINEAGE_RANKS = ["kingdom", "phylum", "class", "order", "family", "genus", "species"]
+_lineage_filled = _df_lineage.copy()
+for _col in _LINEAGE_RANKS:
+    _lineage_filled[_col] = _lineage_filled[_col].fillna("Unknown")
+
+_summary_filled = _file_counts.merge(
+    _lineage_filled[["Taxa_NCBI"] + _LINEAGE_RANKS], on="Taxa_NCBI", how="left",
 )
-_summary = _summary.sort_values("file_count", ascending=False).reset_index(drop=True)
-_summary["id"] = _summary["Taxa_NCBI"]
+for _col in _LINEAGE_RANKS:
+    _summary_filled[_col] = _summary_filled[_col].fillna("Unknown")
 
-EXPLORER_SUMMARY_RECORDS = _summary[
-    ["id", "Taxa_NCBI", "species", "family", "genus", "order", "class", "phylum", "kingdom", "file_count"]
-].to_dict("records")
+SPECIES_BY_TAXID = _summary_filled.set_index("Taxa_NCBI")["species"].to_dict()
+GENUS_BY_TAXID = _summary_filled.set_index("Taxa_NCBI")["genus"].to_dict()
 
-# Clean (non-markdown) copy of the summary for downloading the full table.
-EXPLORER_EXPORT_DF = _summary[
-    ["Taxa_NCBI", "species", "genus", "family", "order", "class", "phylum", "kingdom", "file_count"]
-].copy()
+# Taxonomic levels the Explorer table can be grouped by, finest to coarsest.
+LEVEL_COLUMNS = ["Taxa_NCBI", "species", "genus", "family", "order", "class", "phylum", "kingdom"]
+LEVEL_LABELS = {
+    "Taxa_NCBI": "TaxID",
+    "species": "Species",
+    "genus": "Genus",
+    "family": "Family",
+    "order": "Order",
+    "class": "Class",
+    "phylum": "Phylum",
+    "kingdom": "Kingdom",
+}
+DEFAULT_LEVEL = "Taxa_NCBI"
 
 _NCBI_TAXONOMY_URL = "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id="
-for _rec in EXPLORER_SUMMARY_RECORDS:
-    _taxid = _rec["Taxa_NCBI"]
-    _rec["Taxa_NCBI"] = "[{0}]({1}{0})".format(_taxid, _NCBI_TAXONOMY_URL)
 
-TAXID_META = {
-    row["id"]: {"species": row.get("species"), "genus": row.get("genus")}
-    for row in EXPLORER_SUMMARY_RECORDS
-}
+
+def _build_level(level):
+    """Build Explorer table records grouped at `level`, along with a
+    row_id -> [taxids] map (for the file modal) and a plain export dataframe.
+    Columns finer than `level` collapse to a placeholder since they no
+    longer map 1:1 to a single row.
+    """
+    idx = LEVEL_COLUMNS.index(level)
+    finer_cols = LEVEL_COLUMNS[:idx]
+    coarser_cols = [c for c in LEVEL_COLUMNS[idx + 1:] if c != "Taxa_NCBI"]
+
+    if level == "Taxa_NCBI":
+        grouped = _summary_filled.copy()
+        grouped["_taxids"] = grouped["Taxa_NCBI"].apply(lambda t: [t])
+    else:
+        agg = {"file_count": "sum", "Taxa_NCBI": lambda s: list(s)}
+        for c in coarser_cols:
+            agg[c] = "first"
+        grouped = _summary_filled.groupby(level, dropna=False).agg(agg).reset_index()
+        grouped = grouped.rename(columns={"Taxa_NCBI": "_taxids"})
+
+    grouped = grouped.sort_values("file_count", ascending=False).reset_index(drop=True)
+
+    records = []
+    export_rows = []
+    row_taxids = {}
+    row_label = {}
+    for i, row in grouped.iterrows():
+        rid = f"{level}::{i}"
+        row_taxids[rid] = [int(t) for t in row["_taxids"]]
+        row_label[rid] = row[level]
+
+        rec = {"id": rid, "file_count": int(row["file_count"])}
+        export_row = {"file_count": int(row["file_count"])}
+        for c in LEVEL_COLUMNS:
+            if c == "Taxa_NCBI":
+                if level == "Taxa_NCBI":
+                    taxid = int(row["Taxa_NCBI"])
+                    rec[c] = "[{0}]({1}{0})".format(taxid, _NCBI_TAXONOMY_URL)
+                    export_row[c] = taxid
+                else:
+                    rec[c] = "—"
+                    export_row[c] = ""
+                continue
+            if c in finer_cols:
+                rec[c] = "—"
+                export_row[c] = ""
+            else:
+                rec[c] = row[c]
+                export_row[c] = row[c]
+        records.append(rec)
+        export_rows.append(export_row)
+
+    export_df = pd.DataFrame(export_rows, columns=LEVEL_COLUMNS + ["file_count"])
+    return records, row_taxids, row_label, export_df
+
+
+LEVEL_TABLES = {}
+LEVEL_ROW_TAXIDS = {}
+LEVEL_ROW_LABELS = {}
+LEVEL_EXPORT_DFS = {}
+for _level in LEVEL_COLUMNS:
+    _records, _row_taxids, _row_label, _export_df = _build_level(_level)
+    LEVEL_TABLES[_level] = _records
+    LEVEL_ROW_TAXIDS[_level] = _row_taxids
+    LEVEL_ROW_LABELS[_level] = _row_label
+    LEVEL_EXPORT_DFS[_level] = _export_df
+
+EXPLORER_SUMMARY_RECORDS = LEVEL_TABLES[DEFAULT_LEVEL]
+EXPLORER_EXPORT_DF = LEVEL_EXPORT_DFS[DEFAULT_LEVEL]
 
 dash_app.index_string = """<!DOCTYPE html>
 <html>
@@ -524,13 +600,13 @@ BODY = dbc.Container(
                     ],
                 ),
                 dbc.Tab(
-                    label="PlantMASST Explorer",
+                    label="plantMASST Explorer",
                     tab_id="tab-explorer",
                     children=[
                         html.Br(),
                         dbc.Card(
                             [
-                                dbc.CardHeader(html.H5("PlantMASST Explorer — Browse by Taxon")),
+                                dbc.CardHeader(html.H5("plantMASST Explorer — Browse by Taxon")),
                                 dbc.CardBody(
                                     [
                                         dbc.Row(
@@ -544,10 +620,37 @@ BODY = dbc.Container(
                                                     ),
                                                 ),
                                                 dbc.Col(
+                                                    dbc.InputGroup(
+                                                        [
+                                                            dbc.InputGroupText("Group counts by"),
+                                                            dbc.Select(
+                                                                id="explorer-level-select",
+                                                                options=[
+                                                                    {"label": LEVEL_LABELS[c], "value": c}
+                                                                    for c in LEVEL_COLUMNS
+                                                                ],
+                                                                value=DEFAULT_LEVEL,
+                                                            ),
+                                                        ],
+                                                        size="sm",
+                                                    ),
+                                                    width="auto",
+                                                ),
+                                                dbc.Col(
                                                     dbc.Button(
                                                         "Download Table (TSV)",
                                                         id="explorer-download-btn",
                                                         color="primary",
+                                                        size="sm",
+                                                        n_clicks=0,
+                                                    ),
+                                                    width="auto",
+                                                ),
+                                                dbc.Col(
+                                                    dbc.Button(
+                                                        "Download Filtered Table (TSV)",
+                                                        id="explorer-download-filtered-btn",
+                                                        color="secondary",
                                                         size="sm",
                                                         n_clicks=0,
                                                     ),
@@ -558,6 +661,7 @@ BODY = dbc.Container(
                                             className="align-items-center mb-2",
                                         ),
                                         dcc.Download(id="explorer-download"),
+                                        dcc.Download(id="explorer-download-filtered"),
                                         EXPLORER_TABLE,
                                     ]
                                 ),
@@ -1006,13 +1110,34 @@ def toggle_file_modal(active_cell, close_clicks, is_open):
         return dash.no_update, dash.no_update, dash.no_update, [], "", None
 
     if triggered == "explorer-table" and active_cell and active_cell.get("column_id") == "file_count":
-        taxid = active_cell["row_id"]
-        meta = TAXID_META.get(taxid, {})
-        label = meta.get("species") or meta.get("genus") or ""
-        title = f"Files for TaxID {taxid}" + (f" — {label}" if label else "")
-        return True, FILE_LISTS.get(taxid, []), title, [], "", dash.no_update
+        rid = active_cell["row_id"]
+        level = rid.split("::", 1)[0]
+        taxids = LEVEL_ROW_TAXIDS.get(level, {}).get(rid, [])
+        label = LEVEL_ROW_LABELS.get(level, {}).get(rid, "")
+
+        if level == "Taxa_NCBI":
+            taxid = taxids[0] if taxids else label
+            extra = SPECIES_BY_TAXID.get(taxid) or GENUS_BY_TAXID.get(taxid) or ""
+            extra = "" if extra == "Unknown" else extra
+            title = f"Files for TaxID {taxid}" + (f" — {extra}" if extra else "")
+        else:
+            title = f"Files for {LEVEL_LABELS.get(level, level)}: {label}"
+
+        files = []
+        for taxid in taxids:
+            files.extend(FILE_LISTS.get(taxid, []))
+
+        return True, files, title, [], "", dash.no_update
 
     return (dash.no_update,) * 6
+
+
+@dash_app.callback(
+    Output("explorer-table", "data"),
+    Input("explorer-level-select", "value"),
+)
+def update_explorer_level(level):
+    return LEVEL_TABLES.get(level, LEVEL_TABLES[DEFAULT_LEVEL])
 
 
 @dash_app.callback(
@@ -1024,6 +1149,18 @@ def download_explorer_table(n_clicks):
     return dcc.send_data_frame(
         EXPLORER_EXPORT_DF.to_csv, "plantmasst_explorer_table.tsv", sep="\t", index=False
     )
+
+
+@dash_app.callback(
+    Output("explorer-download-filtered", "data"),
+    Input("explorer-download-filtered-btn", "n_clicks"),
+    State("explorer-level-select", "value"),
+    prevent_initial_call=True,
+)
+def download_explorer_filtered_table(n_clicks, level):
+    export_df = LEVEL_EXPORT_DFS.get(level, LEVEL_EXPORT_DFS[DEFAULT_LEVEL])
+    filename = f"plantmasst_explorer_table_{level.lower()}.tsv"
+    return dcc.send_data_frame(export_df.to_csv, filename, sep="\t", index=False)
 
 
 @dash_app.callback(
