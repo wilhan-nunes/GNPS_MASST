@@ -60,6 +60,8 @@ _summary_filled = _file_counts.merge(
 for _col in _LINEAGE_RANKS:
     _summary_filled[_col] = _summary_filled[_col].fillna("Unknown")
 
+_summary_filled = _summary_filled[_summary_filled["kingdom"] != "Unknown"].reset_index(drop=True)
+
 SPECIES_BY_TAXID = _summary_filled.set_index("Taxa_NCBI")["species"].to_dict()
 GENUS_BY_TAXID = _summary_filled.set_index("Taxa_NCBI")["genus"].to_dict()
 
