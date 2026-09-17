@@ -35,6 +35,9 @@ cache = Cache(dash_app.server, config={
 
 # ---- PlantMASST Explorer: pre-computed at module load ----
 _REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+
+sys.path.insert(0, os.path.join(_REPO_DIR, "plant_masst_versions"))
+from registry import DEFAULT_VERSION, version_options  # noqa: E402
 _df_files = pd.read_csv(os.path.join(_REPO_DIR, "microbe_masst", "trees", "plant_masst_tree", "plant_masst_table.csv"))
 _df_files["Taxa_NCBI"] = pd.to_numeric(_df_files["Taxa_NCBI"], errors="coerce")
 _df_files = _df_files.dropna(subset=["Taxa_NCBI"])
@@ -272,6 +275,19 @@ DATASELECTION_CARD = [
                     dbc.InputGroupText("Delta Mass Above (Da)"),
                     dbc.Input(id='delta_mass_above', type='number', placeholder="delta_mass_above", value=200, min = 0, max = 300, step=1),
                     dbc.Tooltip("Min= 0; Max= 300", target="delta_mass_above", placement="bottom"),
+                ],
+                className="mb-3",
+            ),
+            dbc.InputGroup(
+                [
+                    dbc.InputGroupText("plantMASST Table Version"),
+                    dbc.Select(
+                        id="plant_table_version",
+                        options=version_options(),
+                        value=DEFAULT_VERSION,
+                    ),
+                    dbc.Tooltip("Which plantMASST reference tree/table version to search against.",
+                                target="plant_table_version", placement="bottom"),
                 ],
                 className="mb-3",
             ),
@@ -783,7 +799,8 @@ def sort_and_filter_by_intensity(peaks_string, max_peaks=None):
                 State('min_matched_peaks', 'value'),
                 State('analog_select', 'value'),
                 State('delta_mass_below', 'value'),
-                State('delta_mass_above', 'value')
+                State('delta_mass_above', 'value'),
+                State('plant_table_version', 'value')
               ])
 def draw_output(
                 search_button_usi,
@@ -799,7 +816,8 @@ def draw_output(
                 min_matched_peaks,
                 use_analog,
                 analog_mass_below,
-                analog_mass_above):
+                analog_mass_above,
+                plant_table_version):
 
     button_id = ctx.triggered_id if not None else 'No clicks yet'
 
@@ -822,6 +840,9 @@ def draw_output(
     os.makedirs(output_temp, exist_ok=True)
 
     out_file = "../../{}/fastMASST".format(output_temp)
+
+    plant_masst_runner = os.path.join(_REPO_DIR, "plant_masst_versions", "run_plant_masst.py")
+    plant_table_version = plant_table_version or DEFAULT_VERSION
 
     # TODO seems to always run analog
     use_analog = use_analog == "Yes"
@@ -854,7 +875,7 @@ END IONS\n"""
                 o.write(mgf_string)
 
             # Update the command to use the MGF file
-            cmd = 'cd microbe_masst/code/ && python masst_batch_client.py \
+            cmd = 'cd microbe_masst/code/ && python "{}" masst_batch_client \
             --in_file "{}" \
             --out_file "{}" \
             --parallel_queries 1 \
@@ -865,7 +886,9 @@ END IONS\n"""
             --analog {} \
             --analog_mass_below {} \
             --analog_mass_above {} \
-            '.format(os.path.join("../..", mgf_filename),
+            --plant_table_version {} \
+            '.format(plant_masst_runner,
+                     os.path.join("../..", mgf_filename),
                      out_file,
                      prec_mz_tol,
                      ms2_mz_tol,
@@ -873,11 +896,12 @@ END IONS\n"""
                      min_matched_peaks,
                      use_analog,
                      analog_mass_below,
-                     analog_mass_above
+                     analog_mass_above,
+                     plant_table_version
                      )
         else:
             # Original command for USI search
-            cmd = 'cd microbe_masst/code/ && python masst_client.py \
+            cmd = 'cd microbe_masst/code/ && python "{}" masst_client \
             --usi_or_lib_id "{}" \
             --out_file "{}" \
             --precursor_mz_tol {} \
@@ -886,14 +910,17 @@ END IONS\n"""
             --min_matched_signals {} \
             --analog_mass_below {} \
             --analog_mass_above {} \
-            '.format(usi1,
+            --plant_table_version {} \
+            '.format(plant_masst_runner,
+                     usi1,
                      out_file,
                      prec_mz_tol,
                      ms2_mz_tol,
                      min_cos,
                      min_matched_peaks,
                      analog_mass_below,
-                     analog_mass_above
+                     analog_mass_above,
+                     plant_table_version
                      )
         # Tacking on the analog flag
         if use_analog:
@@ -920,7 +947,7 @@ END IONS\n""".format(precursor_mz, charge, peaks)
         with open(mgf_filename, "w") as o:
             o.write(mgf_string)
 
-        cmd = 'cd microbe_masst/code/ && python masst_batch_client.py \
+        cmd = 'cd microbe_masst/code/ && python "{}" masst_batch_client \
         --in_file "{}" \
         --out_file "{}" \
         --parallel_queries 1 \
@@ -931,7 +958,9 @@ END IONS\n""".format(precursor_mz, charge, peaks)
         --analog {} \
         --analog_mass_below {} \
         --analog_mass_above {} \
-        '.format(os.path.join("../..", mgf_filename),
+        --plant_table_version {} \
+        '.format(plant_masst_runner,
+                os.path.join("../..", mgf_filename),
                 out_file,
                 prec_mz_tol,
                 ms2_mz_tol,
@@ -939,7 +968,8 @@ END IONS\n""".format(precursor_mz, charge, peaks)
                 min_matched_peaks,
                 use_analog,
                 analog_mass_below,
-                analog_mass_above
+                analog_mass_above,
+                plant_table_version
                 )
 
     import sys
