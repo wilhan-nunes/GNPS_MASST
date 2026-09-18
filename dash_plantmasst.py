@@ -45,6 +45,32 @@ _df_files["Taxa_NCBI"] = _df_files["Taxa_NCBI"].astype(int)
 
 _df_lineage = pd.read_csv(os.path.join(_REPO_DIR, "microbe_masst", "lineages", "plant_masst_lineages.csv"))
 
+# ---- Coverage summary: plantMASST vs. total known NCBI Embryophyta taxa ----
+# Totals below are NCBI Taxonomy counts for Embryophyta (land plants) and are
+# not derivable from repo data; update manually if/when they are refreshed.
+_EMBRYOPHYTA_NCBI_TOTALS = {
+    "Families": 734,
+    "Genera": 15658,
+    "Species": 220647,
+}
+_lineages_summary = pd.read_csv(
+    os.path.join(_REPO_DIR, "microbe_masst", "lineages", "plant_masst_lineages_summary.csv")
+)
+_PLANTMASST_COVERED = {
+    "Families": int(_lineages_summary["family"].iloc[0]),
+    "Genera": int(_lineages_summary["genus"].iloc[0]),
+    "Species": int(_lineages_summary["species"].iloc[0]),
+}
+COVERAGE_RECORDS = [
+    {
+        "rank": rank,
+        "total": total,
+        "covered": _PLANTMASST_COVERED[rank],
+        "percent": round(100 * _PLANTMASST_COVERED[rank] / total, 1),
+    }
+    for rank, total in _EMBRYOPHYTA_NCBI_TOTALS.items()
+]
+
 FILE_LISTS = {
     taxid: grp[["Filename", "MassIVE", "file_usi"]].to_dict("records")
     for taxid, grp in _df_files.groupby("Taxa_NCBI")
@@ -528,6 +554,41 @@ EXPLORER_TABLE = dash_table.DataTable(
     markdown_options={"link_target": "_blank"},
 )
 
+COVERAGE_TABLE = dash_table.DataTable(
+    id="coverage-table",
+    columns=[
+        {"name": "NCBI Taxonomy (Embryophyta)", "id": "rank"},
+        {"name": "Total", "id": "total", "type": "numeric", "format": {"specifier": ","}},
+        {"name": "plantMASST", "id": "covered", "type": "numeric", "format": {"specifier": ","}},
+        {"name": "% plantMASST", "id": "percent", "type": "numeric", "format": {"specifier": ".1f"}},
+    ],
+    data=COVERAGE_RECORDS,
+    style_as_list_view=True,
+    style_table={"overflowX": "auto"},
+    style_cell={"padding": "4px 8px", "fontSize": "12px", "textAlign": "left", "fontFamily": "inherit"},
+    style_header={
+        "backgroundColor": "#e3f2fd",
+        "fontWeight": "bold",
+        "borderBottom": "2px solid #1565c0",
+        "fontFamily": "inherit",
+    },
+)
+
+COVERAGE_CARD = dbc.Card(
+    [
+        dbc.CardHeader(html.H5("plantMASST Coverage")),
+        dbc.CardBody(
+            [
+                html.P(
+                    "Coverage of NCBI Embryophyta taxa in plantMASST.",
+                    className="mb-2",
+                ),
+                COVERAGE_TABLE,
+            ]
+        ),
+    ]
+)
+
 EXPLORER_MODAL = dbc.Modal(
     [
         dbc.ModalHeader(
@@ -604,9 +665,11 @@ BODY = dbc.Container(
                                 ),
                                 dbc.Col(
                                     [
-                                        dbc.Card(CONTRIBUTORS_DASHBOARD),
+                                        COVERAGE_CARD,
                                         html.Br(),
                                         dbc.Card(EXAMPLES_DASHBOARD),
+                                        html.Br(),
+                                        dbc.Card(CONTRIBUTORS_DASHBOARD),
                                     ],
                                     className="col-3",
                                 ),
