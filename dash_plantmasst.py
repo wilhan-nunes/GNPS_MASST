@@ -554,25 +554,34 @@ EXPLORER_TABLE = dash_table.DataTable(
     markdown_options={"link_target": "_blank"},
 )
 
-COVERAGE_TABLE = dash_table.DataTable(
-    id="coverage-table",
-    columns=[
-        {"name": "NCBI Taxonomy (Embryophyta)", "id": "rank"},
-        {"name": "Total", "id": "total", "type": "numeric", "format": {"specifier": ","}},
-        {"name": "plantMASST", "id": "covered", "type": "numeric", "format": {"specifier": ","}},
-        {"name": "% plantMASST", "id": "percent", "type": "numeric", "format": {"specifier": ".1f"}},
-    ],
-    data=COVERAGE_RECORDS,
-    style_as_list_view=True,
-    style_table={"overflowX": "auto"},
-    style_cell={"padding": "4px 8px", "fontSize": "12px", "textAlign": "left", "fontFamily": "inherit"},
-    style_header={
-        "backgroundColor": "#e3f2fd",
-        "fontWeight": "bold",
-        "borderBottom": "2px solid #1565c0",
-        "fontFamily": "inherit",
-    },
-)
+def _coverage_row(record):
+    return html.Div(
+        [
+            html.Div(
+                [
+                    html.Span(record["rank"], className="fw-semibold"),
+                    html.Span(f'{record["percent"]:.1f}%', className="fw-bold text-success"),
+                ],
+                className="d-flex justify-content-between align-items-baseline mb-1",
+            ),
+            dbc.Progress(
+                value=record["percent"],
+                color="success",
+                style={"height": "8px"},
+                className="mb-1",
+            ),
+            html.Div(
+                [
+                    html.Span(f'{record["covered"]:,}', className="fw-semibold"),
+                    f' of {record["total"]:,}',
+                ],
+                className="text-muted",
+                style={"fontSize": "0.8rem"},
+            ),
+        ],
+        className="mb-3",
+    )
+
 
 COVERAGE_CARD = dbc.Card(
     [
@@ -581,9 +590,10 @@ COVERAGE_CARD = dbc.Card(
             [
                 html.P(
                     "Coverage of NCBI Embryophyta taxa in plantMASST.",
-                    className="mb-2",
+                    className="mb-3 text-muted",
+                    style={"fontSize": "0.85rem"},
                 ),
-                COVERAGE_TABLE,
+                html.Div([_coverage_row(r) for r in COVERAGE_RECORDS]),
             ]
         ),
     ]
